@@ -179,6 +179,10 @@
 .hidden {\
   display: none;\
 }\
+\
+.comment.collapsed > div.comment-content > div.comment-text { \
+    display: none \
+}\
 ";
 
     var CONTROLS_HTML = ' \
@@ -190,6 +194,7 @@
     <span class="unread-comments-set-container"> \
         Edit Read Data: [<a href class="unread-comments-set" data-target="comic">Comic</a>] [<a href class="unread-comments-set" data-target="page">Page</a>] \
     </span> \
+    <button class="blacklist-edit">Edit blacklist for current comic page</button> \
     <div class="unread-comments-response unread-comments-msg">&zwnj;</span> \
 </div>';
 
@@ -477,6 +482,7 @@
         $controls.find('.unread-comments-mark').click(clickMarkRead);
         $controls.find('.unread-comments-clear').click(clickDeleteData);
         $controls.find('.unread-comments-set').click(clickPickDate);
+        $controls.find('.blacklist-edit').click(editBlacklist);
         $('.page, .prev, .next').off('click');
         // Hidden flag feature gate
         // to enable, do:
@@ -488,8 +494,12 @@
         }
     }
 
+    function getCommentAuthor($comment) {
+        return $comment.find('.vcard cite').first().text().trim();
+    }
+
     function doHighlight(readData) {
-        if (readData.lastReadComic === -1) {
+        if (readData.lastReadComic === -1 && !readData.blackList) {
             return highlightResultMessage("(This is your first visit to the page, so no comments were highlighted.)", 'info');
         }
 
@@ -499,6 +509,24 @@
         }
 
         var $allComments = getAllComments();
+
+        if (readData.blacklist) {
+            var blacklist = readData.blacklist.split(/,/);
+            $allComments.each(function() {
+                var $this = $(this);
+                $this.removeClass('collapsed');
+                $this.find('.showhide').remove();
+                if (blacklist.indexOf(getCommentAuthor($this)) > -1) {
+                    $this.addClass('collapsed');
+                    $('<div class="showhide"><a href="#">show/hide</a></div>').appendTo($this.find('.comment-content').first())
+                        .on('click', function(ev) {
+                            $(ev.currentTarget).closest('.comment').toggleClass('collapsed');
+                            return false;
+                        });
+                }
+            });
+        }
+
         var $commentsToHighlight = $allComments.filter(function() {
             return getCommentDate(this) >= highlightingTimestamp;
         });
@@ -705,6 +733,30 @@
                     $button.removeAttr('disabled');
                 });
             }
+        });
+    }
+
+    function editBlacklist(e) {
+        e.preventDefault();
+        getComicReadData(function(readData) {
+            var inputPrompt = "" +
+                "Edit comma separated list of nicknames to block:";
+            var inputCurrent = readData.blacklist;
+
+            var input = prompt(inputPrompt, inputCurrent);
+            if (input.length > 0) {
+                input = input.split(/,/);
+                for (var i = 0; i < input.length; ++i) {
+                    input[i] = input[i].trim();
+                }
+                readData.blacklist = input.join(',');
+            } else {
+                delete readData.blacklist;
+            }
+
+            saveComicReadData(readData, function() {
+                rehighlight(readData);
+            });
         });
     }
 
